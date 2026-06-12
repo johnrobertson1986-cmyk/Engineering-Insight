@@ -51,6 +51,7 @@ def make_pdf(clean_issues):
     story.append(Spacer(1, 12))
 
     for _, row in clean_issues.iterrows():
+
         story.append(Paragraph(f"Issue {row.get('Issue ID', '')}", styles["Heading2"]))
 
         data = [
@@ -107,6 +108,17 @@ if uploaded_file:
 
     excel_file = pd.ExcelFile(uploaded_file)
 
+    required_sheets = ["Rules", "Assets", "Issues"]
+
+    missing_sheets = [
+        sheet for sheet in required_sheets
+        if sheet not in excel_file.sheet_names
+    ]
+
+    if missing_sheets:
+        st.error(f"Missing required sheet(s): {', '.join(missing_sheets)}")
+        st.stop()
+
     rules = pd.read_excel(uploaded_file, sheet_name="Rules")
     assets = pd.read_excel(uploaded_file, sheet_name="Assets")
     issues = pd.read_excel(uploaded_file, sheet_name="Issues")
@@ -115,6 +127,17 @@ if uploaded_file:
         lessons = pd.read_excel(uploaded_file, sheet_name="Lessons_Learnt")
     else:
         lessons = pd.DataFrame()
+
+    required_issue_columns = ["Issue ID", "Proposed Asset", "Existing Asset"]
+
+    missing_issue_columns = [
+        col for col in required_issue_columns
+        if col not in issues.columns
+    ]
+
+    if missing_issue_columns:
+        st.error(f"Issues sheet is missing column(s): {', '.join(missing_issue_columns)}")
+        st.stop()
 
     clean_issues = issues[
         issues["Issue ID"].notna() &
@@ -135,13 +158,19 @@ if uploaded_file:
     col3.metric("Valid Issues", len(clean_issues))
     col4.metric("Lessons", len(lessons))
 
-    high_risk = clean_issues[
-        clean_issues["Risk"].astype(str).str.lower() == "high"
-    ]
+    if "Risk" in clean_issues.columns:
+        high_risk = clean_issues[
+            clean_issues["Risk"].astype(str).str.lower() == "high"
+        ]
+    else:
+        high_risk = pd.DataFrame()
 
-    open_issues = clean_issues[
-        clean_issues["Status"].astype(str).str.lower() == "open"
-    ]
+    if "Status" in clean_issues.columns:
+        open_issues = clean_issues[
+            clean_issues["Status"].astype(str).str.lower() == "open"
+        ]
+    else:
+        open_issues = pd.DataFrame()
 
     if "Lesson Recommendation" in clean_issues.columns:
         lessons_applied = clean_issues[
@@ -168,12 +197,22 @@ if uploaded_file:
 
     if "Latitude" in assets.columns and "Longitude" in assets.columns:
 
-        map_data = assets[["Latitude", "Longitude"]].dropna()
+        map_data = assets[["Latitude", "Longitude"]].dropna().copy()
+
+        map_data = map_data.rename(columns={
+            "Latitude": "lat",
+            "Longitude": "lon"
+        })
+
+        map_data["lat"] = pd.to_numeric(map_data["lat"], errors="coerce")
+        map_data["lon"] = pd.to_numeric(map_data["lon"], errors="coerce")
+
+        map_data = map_data.dropna(subset=["lat", "lon"])
 
         if len(map_data) > 0:
             st.map(map_data)
         else:
-            st.warning("Latitude and Longitude columns exist, but no coordinate data was found.")
+            st.warning("Coordinates were found but could not be converted into map points.")
 
     else:
         st.warning("No Latitude / Longitude columns found in the Assets sheet.")
