@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+import html
 
 import folium
 from folium.plugins import MeasureControl
@@ -12,10 +13,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 
-st.set_page_config(
-    page_title="Engineering Insight",
-    layout="wide"
-)
+st.set_page_config(page_title="Engineering Insight", layout="wide")
 
 st.title("Engineering Insight")
 st.subheader("Rules Engine | Utility Clearance Review | Lessons Learnt | GIS Risk Map")
@@ -55,43 +53,33 @@ def make_pdf(clean_issues):
     story.append(Spacer(1, 12))
 
     for _, row in clean_issues.iterrows():
-
         story.append(Paragraph(f"Issue {row.get('Issue ID', '')}", styles["Heading2"]))
 
         data = [
-            ["Field", "Value"],
-            ["Rule ID", str(row.get("Rule ID", ""))],
-            ["Proposed Asset", str(row.get("Proposed Asset", ""))],
-            ["Existing Asset", str(row.get("Existing Asset", ""))],
-            ["Location", str(row.get("Location", ""))],
-            ["Risk", str(row.get("Risk", ""))],
-            ["Proposed Depth", str(row.get("Proposed Depth (m)", ""))],
-            ["Existing Depth", str(row.get("Existing Depth (m)", ""))],
-            ["Actual Separation", str(row.get("Depth Difference (m)", ""))],
-            ["Required Separation", str(row.get("Required Separation (m)", ""))],
-            ["Status", str(row.get("Status", ""))],
-            ["Lesson ID", str(row.get("Lesson ID", ""))],
-            ["Lesson Learnt", str(row.get("Lesson Learnt", ""))],
-            ["Recommendation", str(row.get("Lesson Recommendation", ""))],
-            ["Evidence Required", str(row.get("Evidence Required", ""))],
-            ["Source Project", str(row.get("Lesson Source Project", ""))],
-            ["Next Action", str(row.get("Next Action", ""))]
+            ["Rule ID", row.get("Rule ID", "")],
+            ["Proposed Asset", row.get("Proposed Asset", "")],
+            ["Existing Asset", row.get("Existing Asset", "")],
+            ["Location", row.get("Location", "")],
+            ["Risk", row.get("Risk", "")],
+            ["Proposed Depth", row.get("Proposed Depth (m)", "")],
+            ["Existing Depth", row.get("Existing Depth (m)", "")],
+            ["Actual Separation", row.get("Depth Difference (m)", "")],
+            ["Required Separation", row.get("Required Separation (m)", "")],
+            ["Recommendation", row.get("Lesson Recommendation", "")],
+            ["Evidence Required", row.get("Evidence Required", "")],
+            ["Next Action", row.get("Next Action", "")]
         ]
 
-        wrapped_data = []
+        wrapped = [
+            [Paragraph(str(a), normal), Paragraph(str(b), normal)]
+            for a, b in data
+        ]
 
-        for field, value in data:
-            wrapped_data.append([
-                Paragraph(str(field), normal),
-                Paragraph(str(value), normal)
-            ])
-
-        table = Table(wrapped_data, colWidths=[130, 360])
+        table = Table(wrapped, colWidths=[130, 360])
 
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
             ("RIGHTPADDING", (0, 0), (-1, -1), 6),
@@ -104,7 +92,6 @@ def make_pdf(clean_issues):
 
     doc.build(story)
     buffer.seek(0)
-
     return buffer
 
 
@@ -128,7 +115,6 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
 
     map_assets["Latitude"] = pd.to_numeric(map_assets["Latitude"], errors="coerce")
     map_assets["Longitude"] = pd.to_numeric(map_assets["Longitude"], errors="coerce")
-
     map_assets = map_assets.dropna(subset=["Latitude", "Longitude"])
 
     if "Asset Owner" in map_assets.columns and selected_providers:
@@ -180,7 +166,6 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
     provider_groups = {}
 
     for _, asset in map_assets.iterrows():
-
         owner = str(asset.get("Asset Owner", "Unknown"))
 
         if owner not in provider_groups:
@@ -192,7 +177,7 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
 
         colour = owner_colours.get(owner, "gray")
 
-        asset_popup = f"""
+        popup = f"""
         <b>{asset.get('Asset Type', '')}</b><br>
         Asset ID: {asset.get('Asset ID', '')}<br>
         Owner: {owner}<br>
@@ -208,14 +193,11 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
             fill=True,
             fill_color=colour,
             fill_opacity=0.85,
-            popup=asset_popup,
+            popup=popup,
             tooltip=f"{asset.get('Asset ID', '')} | {asset.get('Asset Type', '')}"
         ).add_to(provider_groups[owner])
 
-    risk_group = folium.FeatureGroup(
-        name="Risk / Clash Issues",
-        show=True
-    )
+    risk_group = folium.FeatureGroup(name="Risk / Clash Issues", show=True)
     risk_group.add_to(m)
 
     filtered_clashes = clean_issues.copy()
@@ -226,28 +208,12 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
         ]
 
     for _, issue in filtered_clashes.iterrows():
-
-        proposed_asset = find_asset_by_type(
-            map_assets,
-            issue.get("Proposed Asset", "")
-        )
-
-        existing_asset = find_asset_by_type(
-            map_assets,
-            issue.get("Existing Asset", "")
-        )
+        proposed_asset = find_asset_by_type(map_assets, issue.get("Proposed Asset", ""))
+        existing_asset = find_asset_by_type(map_assets, issue.get("Existing Asset", ""))
 
         if proposed_asset is not None and existing_asset is not None:
-
-            p = [
-                proposed_asset["Latitude"],
-                proposed_asset["Longitude"]
-            ]
-
-            e = [
-                existing_asset["Latitude"],
-                existing_asset["Longitude"]
-            ]
+            p = [proposed_asset["Latitude"], proposed_asset["Longitude"]]
+            e = [existing_asset["Latitude"], existing_asset["Longitude"]]
 
             risk = str(issue.get("Risk", ""))
 
@@ -272,21 +238,19 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
             mid_lat = (p[0] + e[0]) / 2
             mid_lon = (p[1] + e[1]) / 2
 
-            issue_popup = f"""
+            popup = f"""
             <b>{issue.get('Issue ID', '')} - {risk}</b><br>
             Rule: {issue.get('Rule ID', '')}<br>
             Proposed: {issue.get('Proposed Asset', '')}<br>
             Existing: {issue.get('Existing Asset', '')}<br>
-            Location: {issue.get('Location', '')}<br>
             Actual separation: {actual_sep} m<br>
             Required separation: {required_sep} m<br>
-            Lesson: {issue.get('Lesson Learnt', '')}<br>
             Recommendation: {issue.get('Lesson Recommendation', '')}
             """
 
             folium.Marker(
                 location=[mid_lat, mid_lon],
-                popup=issue_popup,
+                popup=popup,
                 tooltip=f"{issue.get('Issue ID', '')} | {risk}",
                 icon=folium.Icon(
                     color="red" if risk.lower() == "high" else "orange",
@@ -322,8 +286,125 @@ def build_map(assets, clean_issues, selected_providers, selected_risks):
     return m
 
 
-if uploaded_file:
+def render_wrapped_issues_table(clean_issues):
+    st.subheader("Issues Summary")
 
+    summary_columns = [
+        "Issue ID",
+        "Risk",
+        "Proposed Asset",
+        "Existing Asset",
+        "Location",
+        "Depth Difference (m)",
+        "Required Separation (m)",
+        "Lesson Recommendation",
+        "Evidence Required",
+        "Next Action"
+    ]
+
+    available_columns = [
+        col for col in summary_columns
+        if col in clean_issues.columns
+    ]
+
+    issues_summary = clean_issues[available_columns].copy()
+
+    st.markdown(
+        """
+        <style>
+        .issues-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin-top: 10px;
+        }
+        .issues-table th {
+            background-color: #f2f2f2;
+            font-weight: 700;
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            font-size: 13px;
+        }
+        .issues-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+        .issues-table tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        .risk-high {
+            color: white;
+            background-color: #d62728;
+            font-weight: 700;
+            text-align: center;
+        }
+        .risk-medium {
+            color: black;
+            background-color: #ffbf00;
+            font-weight: 700;
+            text-align: center;
+        }
+        .risk-low {
+            color: white;
+            background-color: #2ca02c;
+            font-weight: 700;
+            text-align: center;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    table_html = "<table class='issues-table'>"
+    table_html += "<tr>"
+
+    for col in issues_summary.columns:
+        table_html += f"<th>{html.escape(str(col))}</th>"
+
+    table_html += "</tr>"
+
+    for _, row in issues_summary.iterrows():
+        table_html += "<tr>"
+
+        for col in issues_summary.columns:
+            value = row.get(col, "")
+
+            if pd.isna(value):
+                value = ""
+
+            safe_value = html.escape(str(value))
+
+            if col == "Risk":
+                risk = str(value).lower()
+
+                if risk == "high":
+                    table_html += f"<td class='risk-high'>{safe_value}</td>"
+                elif risk == "medium":
+                    table_html += f"<td class='risk-medium'>{safe_value}</td>"
+                elif risk == "low":
+                    table_html += f"<td class='risk-low'>{safe_value}</td>"
+                else:
+                    table_html += f"<td>{safe_value}</td>"
+            else:
+                table_html += f"<td>{safe_value}</td>"
+
+        table_html += "</tr>"
+
+    table_html += "</table>"
+
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+if uploaded_file:
     excel_file = pd.ExcelFile(uploaded_file)
 
     required_sheets = ["Rules", "Assets", "Issues"]
@@ -346,32 +427,13 @@ if uploaded_file:
     else:
         lessons = pd.DataFrame()
 
-    required_issue_columns = [
-        "Issue ID",
-        "Proposed Asset",
-        "Existing Asset"
-    ]
-
-    missing_issue_columns = [
-        column for column in required_issue_columns
-        if column not in issues.columns
-    ]
-
-    if missing_issue_columns:
-        st.error(
-            f"Issues sheet is missing column(s): {', '.join(missing_issue_columns)}"
-        )
-        st.stop()
-
     clean_issues = issues[
         issues["Issue ID"].notna() &
         issues["Proposed Asset"].notna() &
         issues["Existing Asset"].notna()
     ].copy()
 
-    clean_issues = clean_issues.drop_duplicates(
-        subset=["Issue ID"]
-    )
+    clean_issues = clean_issues.drop_duplicates(subset=["Issue ID"])
 
     st.success("Workbook loaded successfully.")
 
@@ -414,31 +476,25 @@ if uploaded_file:
     st.subheader("Risk Summary")
 
     if "Risk" in clean_issues.columns and len(clean_issues) > 0:
-        risk_summary = clean_issues["Risk"].value_counts()
-        st.bar_chart(risk_summary)
+        st.bar_chart(clean_issues["Risk"].value_counts())
     else:
         st.info("No risk data available.")
 
     st.header("GIS Layers and Clash Review")
 
     if "Asset Owner" in assets.columns:
-        providers = sorted(
-            assets["Asset Owner"].dropna().astype(str).unique()
-        )
+        providers = sorted(assets["Asset Owner"].dropna().astype(str).unique())
     else:
         providers = []
 
     if "Risk" in clean_issues.columns:
-        risk_options = sorted(
-            clean_issues["Risk"].dropna().astype(str).unique()
-        )
+        risk_options = sorted(clean_issues["Risk"].dropna().astype(str).unique())
     else:
         risk_options = []
 
     left, right = st.columns([2, 1])
 
     with right:
-
         st.subheader("Layer Controls")
 
         selected_providers = st.multiselect(
@@ -466,11 +522,9 @@ if uploaded_file:
             st.info("No clashes found for selected filters.")
 
         for _, row in clash_box.iterrows():
-
             title = f"{row.get('Issue ID', '')} | {row.get('Risk', '')}"
 
             with st.expander(title):
-
                 st.write(f"**Proposed:** {row.get('Proposed Asset', '')}")
                 st.write(f"**Existing:** {row.get('Existing Asset', '')}")
                 st.write(f"**Location:** {row.get('Location', '')}")
@@ -480,16 +534,16 @@ if uploaded_file:
                 st.write(f"**Evidence:** {row.get('Evidence Required', '')}")
 
     with left:
-
         st.subheader("Satellite / GIS Utility Map")
 
         if "Latitude" in assets.columns and "Longitude" in assets.columns:
-
             assets_for_map = assets.copy()
+
             assets_for_map["Latitude"] = pd.to_numeric(
                 assets_for_map["Latitude"],
                 errors="coerce"
             )
+
             assets_for_map["Longitude"] = pd.to_numeric(
                 assets_for_map["Longitude"],
                 errors="coerce"
@@ -500,7 +554,6 @@ if uploaded_file:
             )
 
             if len(assets_for_map) > 0:
-
                 gis_map = build_map(
                     assets_for_map,
                     clean_issues,
@@ -513,12 +566,10 @@ if uploaded_file:
                     width=None,
                     height=750
                 )
-
             else:
                 st.warning(
                     "Latitude and Longitude columns exist, but no valid coordinate data was found."
                 )
-
         else:
             st.warning(
                 "No Latitude / Longitude columns found in the Assets sheet."
@@ -528,43 +579,17 @@ if uploaded_file:
         "Map points are pilot GIS coordinates. Before construction, confirm assets using survey, BYDA/DBYD plans, ACTmapi data, and potholing."
     )
 
-    st.subheader("Issues Register")
-    st.dataframe(
-        clean_issues,
-        use_container_width=True
-    )
+    render_wrapped_issues_table(clean_issues)
 
     excel_buffer = BytesIO()
 
-    with pd.ExcelWriter(
-        excel_buffer,
-        engine="openpyxl"
-    ) as writer:
-
-        rules.to_excel(
-            writer,
-            sheet_name="Rules",
-            index=False
-        )
-
-        assets.to_excel(
-            writer,
-            sheet_name="Assets",
-            index=False
-        )
-
-        clean_issues.to_excel(
-            writer,
-            sheet_name="Issues",
-            index=False
-        )
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+        rules.to_excel(writer, sheet_name="Rules", index=False)
+        assets.to_excel(writer, sheet_name="Assets", index=False)
+        clean_issues.to_excel(writer, sheet_name="Issues", index=False)
 
         if len(lessons) > 0:
-            lessons.to_excel(
-                writer,
-                sheet_name="Lessons_Learnt",
-                index=False
-            )
+            lessons.to_excel(writer, sheet_name="Lessons_Learnt", index=False)
 
     st.download_button(
         "Download Clean Excel Report",
@@ -583,7 +608,4 @@ if uploaded_file:
     )
 
 else:
-
-    st.info(
-        "Upload your Engineering Insight workbook to begin."
-    )
+    st.info("Upload your Engineering Insight workbook to begin.")
