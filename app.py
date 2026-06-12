@@ -110,3 +110,26 @@ if uploaded_file:
     )
 else:
     st.info("Upload your Engineering Insight workbook to begin.")
+
+st.subheader("Dashboard")
+
+high_risk = clean_issues[
+    clean_issues["Risk"].astype(str).str.lower() == "high"
+]
+
+open_issues = clean_issues[
+    clean_issues["Status"].astype(str).str.lower() == "open"
+]
+
+lessons_applied = clean_issues[
+    clean_issues["Lesson Recommendation"].notna()
+]
+
+col5, col6, col7 = st.columns(3)
+col5.metric("High Risk Issues", len(high_risk))
+col6.metric("Open Issues", len(open_issues))
+col7.metric("Lessons Applied", len(lessons_applied))
+
+st.subheader("Risk Summary")
+risk_summary = clean_issues["Risk"].value_counts()
+st.bar_chart(risk_summary)
