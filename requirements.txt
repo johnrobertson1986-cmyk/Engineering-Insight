@@ -4,5 +4,3 @@ openpyxl
 reportlab
 folium
 streamlit-folium
-geopandas
-shapely
