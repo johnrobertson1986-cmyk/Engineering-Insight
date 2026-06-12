@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 st.title("Engineering Insight")
-st.subheader("Rules Engine | Utility Clearance Review | Lessons Learnt")
+st.subheader("Rules Engine | Utility Clearance Review | Lessons Learnt | GIS Map")
 
 uploaded_file = st.file_uploader(
     "Upload Engineering Insight Excel workbook",
@@ -51,7 +51,6 @@ def make_pdf(clean_issues):
     story.append(Spacer(1, 12))
 
     for _, row in clean_issues.iterrows():
-
         story.append(Paragraph(f"Issue {row.get('Issue ID', '')}", styles["Heading2"]))
 
         data = [
@@ -75,6 +74,7 @@ def make_pdf(clean_issues):
         ]
 
         wrapped_data = []
+
         for field, value in data:
             wrapped_data.append([
                 Paragraph(str(field), normal),
@@ -126,14 +126,14 @@ if uploaded_file:
 
     st.success("Workbook loaded successfully.")
 
+    st.header("Project Dashboard")
+
     col1, col2, col3, col4 = st.columns(4)
 
     col1.metric("Rules", len(rules))
     col2.metric("Assets", len(assets))
     col3.metric("Valid Issues", len(clean_issues))
     col4.metric("Lessons", len(lessons))
-
-    st.subheader("Dashboard")
 
     high_risk = clean_issues[
         clean_issues["Risk"].astype(str).str.lower() == "high"
@@ -161,6 +161,22 @@ if uploaded_file:
     if "Risk" in clean_issues.columns and len(clean_issues) > 0:
         risk_summary = clean_issues["Risk"].value_counts()
         st.bar_chart(risk_summary)
+    else:
+        st.info("No risk data available.")
+
+    st.subheader("Asset Map")
+
+    if "Latitude" in assets.columns and "Longitude" in assets.columns:
+
+        map_data = assets[["Latitude", "Longitude"]].dropna()
+
+        if len(map_data) > 0:
+            st.map(map_data)
+        else:
+            st.warning("Latitude and Longitude columns exist, but no coordinate data was found.")
+
+    else:
+        st.warning("No Latitude / Longitude columns found in the Assets sheet.")
 
     st.subheader("Issues Register")
     st.dataframe(clean_issues, use_container_width=True)
